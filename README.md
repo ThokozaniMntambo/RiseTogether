@@ -1,6 +1,6 @@
 # RiseTogether
 
-A MERN career readiness platform for South African students and unemployed graduates. Includes a responsive landing page, account registration/login, a protected dashboard, and a working AI Career Coach. The other four modules remain labelled Coming soon. No AI responses or career scores are fabricated.
+A MERN career readiness platform for South African students and unemployed graduates. Includes a responsive landing page, account registration/login, a protected dashboard, and working AI Career Coach and AI CV Coach modules. The other three modules remain labelled Coming soon. No AI responses or career scores are fabricated.
 
 ## Requirements
 
@@ -51,6 +51,7 @@ The build is written to `Client/dist`. For production, host the frontend and `/a
 | POST | `/api/auth/logout` | Clears session cookie |
 | GET | `/api/career-coach/sessions` | Requires session cookie; latest 10 saved coaching sessions for this user |
 | POST | `/api/ai/career-coach` | Requires session cookie; generates and saves personalised AI guidance (original `/api/career-coach/sessions` remains an alias) |
+| POST | `/api/ai/cv-coach` | Requires session cookie; analyzes pasted `{ cv, jobDescription? }` without saving documents or feedback |
 
 Passwords are hashed with bcrypt (12 rounds); JWTs expire after seven days and use HTTP-only, SameSite=Lax cookies (Secure in production). Axios sends credentials. Validation, duplicate-email handling, auth rate limits, origin checks, request size limits, Helmet, and generic server errors are included. Tokens are not stored in browser localStorage. Logout clears the browser cookie; issued JWTs remain valid until expiry if independently copied. Password reset, email verification, and token revocation are future work.
 
@@ -61,6 +62,22 @@ The health check needs no login. No additional protected health endpoint is nece
 Run `npm test` in Server for API contract/security checks. These checks isolate database calls and do not verify a real Atlas connection. With Atlas configured, register a new email, refresh the dashboard, sign out, sign back in, and confirm a signed-out visit to `/dashboard` redirects to login. Duplicate registration, invalid email, short passwords, and incorrect credentials should display errors.
 
 ## AI scope
+
+### AI CV Coach
+
+Open `/dashboard/cv-coach` while signed in. Paste 100–18,000 characters of CV text and optionally up to 8,000 characters of job description, then select **Analyze CV**. The disclosure before the button explains that both texts are sent to OpenAI. Remove contact details, ID numbers and sensitive information first. No PDF or DOCX upload is supported.
+
+The server checks the session and text lengths, reserves a request from the existing shared MongoDB usage records, and sends the text to OpenAI with separate server instructions. It requests structured JSON, checks every field again before responding, and checks that each rewritten bullet's original excerpt actually appears in the CV. Instructions prohibit invented qualifications, employment, achievements, metrics or experience. AI can still make mistakes: review rewritten wording for factual accuracy.
+
+Feedback covers the professional summary, strengths, improvements, job-description keywords, missing or weak skill evidence, ATS-friendly formatting, rewritten bullets and prioritized next steps. Without a job description, the coach is instructed to leave job keywords empty. Missing evidence is not proof that someone lacks a skill. Pasted text cannot establish the original document layout. Feedback is AI-generated guidance, **not a real employer ATS score or hiring prediction**.
+
+CV Coach uses `OPENAI_CV_MODEL` (default `gpt-4.1-mini`), independently of the existing Career Coach model. This model supports Responses and structured outputs according to the [official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-4.1-mini). The existing official Node SDK sends a strict JSON schema, `store: false`, at most 3,000 output tokens, a 45-second timeout and zero automatic retries. Unreviewed model overrides require an explicit `AI_REQUEST_RESERVE_USD` after pricing review. The known default models require a reservation of at least $0.10. This is a conservative estimate, not measured billing.
+
+Both coaches use the **same** historical `career-coach:<user>:hour/day:<bucket>` records and `career-coach:global-budget:v1` record. Keeping these names preserves already-consumed usage. The $3 estimated lifetime application budget, 20 global requests, 3 requests per user per hour and 5 per day remain the defaults. A CV request reduces the allowance available to Career Coach, and vice versa. Failures consume reservations because the provider may charge. MongoDB failure blocks provider calls. CV Coach also prevents duplicate concurrent analysis for one user within a server process.
+
+CV text and results remain in React memory for this page only; there is no CV database collection, saved history or browser storage. Leaving or refreshing clears them. Only usage counters are persisted. `store: false` disables OpenAI response storage; it does not promise zero provider retention under [OpenAI API data policies](https://developers.openai.com/api/docs/guides/your-data). Raw CVs, results and credentials are not logged by this module. Errors use the existing safe provider-error mapping, adapted to CV Coach. A client timeout preserves the draft and warns that the attempt may still count. There are no automatic retries.
+
+`npm test` in Server includes mocked CV service/API tests for authentication, validation, Unicode/body limits, strict output, grounded source excerpts, refusals, provider failures, duplicate requests, and shared caps exercised through both routes with mocked atomic MongoDB writes. All provider responses are mocked; the tests do not use `.env`, Atlas or live OpenAI. Frontend verification: `npm run build` in Client. Existing authentication and Career Coach regression tests remain included.
 
 `POST /api/ai/career-coach` also accepts conversational requests:
 
@@ -88,7 +105,7 @@ Generation makes a paid API request. The chat explains data sharing before submi
 
 Career Coach failures return safe JSON messages; provider failures also include a stable `code` and `retryable` flag. Invalid JSON returns 400, oversized bodies 413 and invalid message/history fields 422 before any provider request. Provider timeouts return 504 (`AI_TIMEOUT`); exhausted credits return 503 (`AI_CREDITS_EXHAUSTED`) with an administrator action rather than retry advice. Provider throttling returns 503 (`AI_BUSY`) with `Retry-After: 30`. Invalid provider configuration returns 503 (`AI_CONFIGURATION_ERROR`), and connection/server/incomplete-output failures return 503 (`AI_UNAVAILABLE`). Explicit provider refusals return 422 (`AI_REFUSAL`) with guidance to rephrase the career question. These distinctions follow the [official OpenAI error documentation](https://developers.openai.com/api/docs/guides/error-codes). Raw provider errors, request content and credentials are never returned or logged by the provider error handler; only fixed internal error codes are logged. No automatic retry occurs, and budget reservations remain consumed. The frontend preserves entered data and previous results and shows actionable server messages; browser timeouts advise checking saved sessions before retrying.
 
-Before every chat or report request, MongoDB atomically reserves usage in `aiusages`. Defaults protect a small development balance:
+Before every Career Coach chat/report or CV Coach request, MongoDB atomically reserves usage in `aiusages`. Defaults protect a small development balance:
 
 | Setting | Default | Scope |
 | --- | --- | --- |
@@ -98,7 +115,7 @@ Before every chat or report request, MongoDB atomically reserves usage in `aiusa
 | `AI_BUDGET_USD` | `3.00` | Lifetime budget measured by conservative reservations |
 | `AI_REQUEST_RESERVE_USD` | `0.10` | Reserved per attempted provider call, including failures |
 
-Both global caps must allow a request. With defaults, 20 requests reserve $2.00 and then generation stops. The $0.10 reservation uses headroom for the default model, bounded input, and maximum report output; it is not actual billing telemetry. Review current pricing and explicitly configure this reservation when changing `OPENAI_MODEL`; a different model without an explicit reservation fails closed. The default model refuses reservations below $0.10. Charges from other apps/keys, account-wide spending, future price changes and an incorrectly configured model reservation cannot be controlled by this application.
+Both global caps must allow a request. With defaults, 20 requests reserve $2.00 and then generation stops. The $0.10 reservation uses headroom for the default model, bounded input, and maximum report output; it is not actual billing telemetry. Review current pricing and explicitly configure this reservation when changing `OPENAI_MODEL`; an unreviewed model without an explicit reservation fails closed. CV Coach defaults to the reviewed gpt-4.1-mini model, also requiring at least $0.10 per reservation. The default model refuses reservations below $0.10. Charges from other apps/keys, account-wide spending, future price changes and an incorrectly configured model reservation cannot be controlled by this application.
 
 Quota exhaustion returns JSON with HTTP 429; per-user limits also set `Retry-After`. Invalid quota configuration or a failed database check blocks generation with HTTP 503. No reservation is refunded after failure, timeout or a process crash, since the provider may still charge. Denied attempts may consume per-user allowance but never start an OpenAI request. Global counters never expire or reset on restart; increasing limits requires an explicit server configuration change. Do not delete the global `career-coach:global-budget:v1` record to clear an error, as that reopens spending.
 
@@ -106,4 +123,4 @@ Persistent limits apply across server instances and route aliases. The existing 
 
 Verification: sign in, open AI Career Coach, choose a starter prompt or type a question, then send it. Continue with a follow-up to check recent conversation context. The responsive chat uses Enter to send and Shift+Enter for a new line, displays a thinking state, prevents duplicate sends and preserves the draft on failure. New chat clears the local conversation; navigating away or refreshing also clears it. Chat turns are not persisted. The legacy profile/report API and account-scoped saved-report retrieval remain available on the backend. Test without `OPENAI_API_KEY` to see the configuration error. `npm test` in Server mocks database/provider calls and checks auth, validation, ownership, provider request format, failures and limits without paid requests. A live Atlas/OpenAI smoke test requires your configured credentials and incurs API usage.
 
-CV Coach, Interview Coach, Learning Roadmap and Career Analytics remain Coming soon. No voice AI, CV upload, separate Learning Roadmap module or analytics collection is enabled yet.
+Interview Coach, Learning Roadmap and Career Analytics remain Coming soon. No voice AI, CV upload, separate Learning Roadmap module or analytics collection is enabled yet.

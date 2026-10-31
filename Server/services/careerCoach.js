@@ -73,4 +73,4 @@ Encourage checking current requirements and opportunities with official sources.
   return { reply: responseText(response) };
 }
 
-module.exports = { generate, chat, matches };
+module.exports = { generate, chat, matches, responseText };
