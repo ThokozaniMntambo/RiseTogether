@@ -58,6 +58,7 @@ app.post('/api/auth/login', limiter, [emailRule, body('password').isString().not
 });
 app.get('/api/auth/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
 app.post('/api/auth/logout', (_req, res) => { const { maxAge, ...options } = cookieOptions(); res.clearCookie('rt_session', options).json({ message: 'Signed out.' }); });
+app.use(['/api/ai/career-coach', '/api/career-coach'], require('./routes/careerCoach'));
 app.use('/api', (_req, res) => res.status(404).json({ message: 'Endpoint not found.' }));
 app.use((error, _req, res, _next) => {
   if (error.code === 11000) return res.status(409).json({ message: 'An account with this email already exists.' });
