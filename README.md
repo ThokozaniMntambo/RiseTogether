@@ -1,6 +1,6 @@
 # RiseTogether
 
-A MERN career readiness platform for South African students and unemployed graduates. Includes a responsive landing page, account registration/login, a protected dashboard, and working AI Career Coach and AI CV Coach modules. The other three modules remain labelled Coming soon. No AI responses or career scores are fabricated.
+A MERN career readiness platform for South African students and unemployed graduates. Includes a responsive landing page, account registration/login, a protected dashboard, and working AI Career Coach, AI CV Coach and AI Interview Coach modules. Learning Roadmap and Career Analytics remain labelled Coming soon. No AI responses or career scores are fabricated.
 
 ## Requirements
 
@@ -73,7 +73,7 @@ Feedback covers the professional summary, strengths, improvements, job-descripti
 
 CV Coach uses `OPENAI_CV_MODEL` (default `gpt-4.1-mini`), independently of the existing Career Coach model. This model supports Responses and structured outputs according to the [official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-4.1-mini). The existing official Node SDK sends a strict JSON schema, `store: false`, at most 3,000 output tokens, a 45-second timeout and zero automatic retries. Unreviewed model overrides require an explicit `AI_REQUEST_RESERVE_USD` after pricing review. The known default models require a reservation of at least $0.10. This is a conservative estimate, not measured billing.
 
-Both coaches use the **same** historical `career-coach:<user>:hour/day:<bucket>` records and `career-coach:global-budget:v1` record. Keeping these names preserves already-consumed usage. The $3 estimated lifetime application budget, 20 global requests, 3 requests per user per hour and 5 per day remain the defaults. A CV request reduces the allowance available to Career Coach, and vice versa. Failures consume reservations because the provider may charge. MongoDB failure blocks provider calls. CV Coach also prevents duplicate concurrent analysis for one user within a server process.
+All three coaches use the **same** historical `career-coach:<user>:hour/day:<bucket>` records and `career-coach:global-budget:v1` record. Keeping these names preserves already-consumed usage. The $3 estimated lifetime application budget, 20 global requests, 3 requests per user per hour and 5 per day remain the defaults. Career, CV and Interview requests all reduce the same remaining allowance. Failures consume reservations because the provider may charge. MongoDB failure blocks provider calls. CV Coach also prevents duplicate concurrent analysis for one user within a server process.
 
 CV text and results remain in React memory for this page only; there is no CV database collection, saved history or browser storage. Leaving or refreshing clears them. Only usage counters are persisted. `store: false` disables OpenAI response storage; it does not promise zero provider retention under [OpenAI API data policies](https://developers.openai.com/api/docs/guides/your-data). Raw CVs, results and credentials are not logged by this module. Errors use the existing safe provider-error mapping, adapted to CV Coach. A client timeout preserves the draft and warns that the attempt may still count. There are no automatic retries.
 
@@ -105,7 +105,7 @@ Generation makes a paid API request. The chat explains data sharing before submi
 
 Career Coach failures return safe JSON messages; provider failures also include a stable `code` and `retryable` flag. Invalid JSON returns 400, oversized bodies 413 and invalid message/history fields 422 before any provider request. Provider timeouts return 504 (`AI_TIMEOUT`); exhausted credits return 503 (`AI_CREDITS_EXHAUSTED`) with an administrator action rather than retry advice. Provider throttling returns 503 (`AI_BUSY`) with `Retry-After: 30`. Invalid provider configuration returns 503 (`AI_CONFIGURATION_ERROR`), and connection/server/incomplete-output failures return 503 (`AI_UNAVAILABLE`). Explicit provider refusals return 422 (`AI_REFUSAL`) with guidance to rephrase the career question. These distinctions follow the [official OpenAI error documentation](https://developers.openai.com/api/docs/guides/error-codes). Raw provider errors, request content and credentials are never returned or logged by the provider error handler; only fixed internal error codes are logged. No automatic retry occurs, and budget reservations remain consumed. The frontend preserves entered data and previous results and shows actionable server messages; browser timeouts advise checking saved sessions before retrying.
 
-Before every Career Coach chat/report or CV Coach request, MongoDB atomically reserves usage in `aiusages`. Defaults protect a small development balance:
+Before every Career Coach chat/report, CV Coach, or Interview Coach generation/evaluation request, MongoDB atomically reserves usage in `aiusages`. Defaults protect a small development balance:
 
 | Setting | Default | Scope |
 | --- | --- | --- |
@@ -124,3 +124,8 @@ Persistent limits apply across server instances and route aliases. The existing 
 Verification: sign in, open AI Career Coach, choose a starter prompt or type a question, then send it. Continue with a follow-up to check recent conversation context. The responsive chat uses Enter to send and Shift+Enter for a new line, displays a thinking state, prevents duplicate sends and preserves the draft on failure. New chat clears the local conversation; navigating away or refreshing also clears it. Chat turns are not persisted. The legacy profile/report API and account-scoped saved-report retrieval remain available on the backend. Test without `OPENAI_API_KEY` to see the configuration error. `npm test` in Server mocks database/provider calls and checks auth, validation, ownership, provider request format, failures and limits without paid requests. A live Atlas/OpenAI smoke test requires your configured credentials and incurs API usage.
 
 Interview Coach, Learning Roadmap and Career Analytics remain Coming soon. No voice AI, CV upload, separate Learning Roadmap module or analytics collection is enabled yet.
+
+
+### AI Interview Coach
+
+AI Interview Coach now supports five tailored questions, text or browser voice-assisted answers, and structured per-answer feedback and overall scoring. Generation and final evaluation each reserve one request from the existing shared AI allowance. Interview text/results are not persisted. See [the implementation, API, privacy, and testing guide](Client/INTERVIEW_COACH.md) for setup, endpoints, browser limitations, automated checks and the manual demonstration checklist.

@@ -72,8 +72,47 @@ test('invalid config and unreviewed model pricing fail closed before reserving u
   await assert.rejects(reserve(user(1)), /at least/);
   assert.equal(records.size, 0);
 });
+test('audio reservations atomically share the existing global budget with text requests', async () => {
+  process.env.AI_BUDGET_USD = '10.10';
+  assert.equal((await reserve(user(1), 1000, 'gpt-realtime-2.1-mini', 10000000)).allowed, true);
+  assert.equal((await reserve(user(2), 1000, 'gpt-4.1-mini')).allowed, true);
+  assert.equal((await reserve(user(3), 1000, 'gpt-realtime-2.1-mini', 10000000)).allowed, false);
+  assert.equal(records.get('career-coach:global-budget:v1').reservedMicros, 10100000);
+  await assert.rejects(reserve(user(4), 1000, 'gpt-realtime-2.1-mini', 0), /Invalid audio reservation/);
+});
+
 test('database failures propagate without granting permission to call AI', async () => {
   AiUsage.findOneAndUpdate = async () => { throw new Error('Database unavailable'); };
   await assert.rejects(reserve(user(1)), /Database unavailable/);
   assert.equal(records.has('career-coach:global-budget:v1'), false);
+});
+
+test('voice plus feedback reserve two slots and $2.85 atomically in the persistent shared pool', async () => {
+  process.env.AI_BUDGET_USD = '3.00';
+  const result = await Promise.all([reserve(user(1), 1000, 'gpt-realtime-2.1-mini', 2850000, 2), reserve(user(2), 1000, 'gpt-realtime-2.1-mini', 2850000, 2)]);
+  assert.equal(result.filter(r => r.allowed).length, 1);
+  const record = records.get('career-coach:global-budget:v1');
+  assert.equal(record.reservedMicros, 2850000); assert.equal(record.count, 2);
+  assert.equal((await require('../services/aiUsage').reserve(user(3), 86401000, 'gpt-realtime-2.1-mini', 2850000, 2)).allowed, false);
+});
+
+test('voice bundle is refused when two user request slots are not available', async () => {
+  process.env.AI_USER_HOURLY_LIMIT = '1';
+  assert.equal((await reserve(user(1), 1000, 'gpt-realtime-2.1-mini', 2850000, 2)).allowed, false);
+  assert.equal(records.has('career-coach:global-budget:v1'), false);
+});
+
+test('budget snapshot reads cumulative reservations without changing records or claiming provider funds', async () => {
+  const original = AiUsage.findById;
+  try {
+    AiUsage.findById = id => { assert.equal(id, 'career-coach:global-budget:v1'); return { lean: async () => ({ count: 12, reservedMicros: 1200000 }) }; };
+    const snapshot = await require('../services/aiUsage').budgetSnapshot(2850000);
+    assert.equal(snapshot.remainingReservationUsd, 1.8);
+    assert.equal(snapshot.fitsVoiceAndFeedback, false);
+    assert.equal(snapshot.providerCreditBalanceVerified, false);
+    assert.equal(records.size, 0);
+    process.env.AI_BUDGET_USD = '4.05'; process.env.AI_MAX_REQUESTS = '200';
+    const sufficient = await require('../services/aiUsage').budgetSnapshot(2850000);
+    assert.equal(sufficient.remainingReservationUsd, 2.85); assert.equal(sufficient.fitsVoiceAndFeedback, true);
+  } finally { AiUsage.findById = original; }
 });

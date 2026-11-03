@@ -1,0 +1,27 @@
+/* Component colours follow palette.css in both themes. Layout remains shared. */
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:8px 11px;border:1px solid var(--control-border);border-radius:7px;background:transparent;color:var(--text);font:inherit;font-size:12px;white-space:nowrap}
+.theme-toggle:hover{background:var(--soft)}
+.workspace-actions{display:flex;align-items:center;gap:18px}
+.auth-theme-row{display:flex;justify-content:flex-end;margin-bottom:12px}
+.nav>.theme-toggle{margin-left:auto}
+:root[data-theme="dark"]{background:var(--bg);color:var(--text);color-scheme:dark}
+/* Secondary copy on tinted surfaces needs a stronger foreground than slate 500. */
+:is(.purpose-strip,.how-section,.auth-story,.sidebar-tip,.development-note,.career-tip-card,.cv-guide,.cv-disclosure,.cv-rewrite>div,.voice-mode,.interview-discard) :is(p,li,small){color:var(--text-on-soft)}
+.career-chat-tag,.cv-ai-tag{background:var(--soft);color:var(--link);border-color:var(--border)}
+.career-message.user .career-message-avatar{color:var(--link)}
+.voice-control:not(.live-end){color:var(--link)}
+.banner-sprout{color:var(--accent)}
+.sidebar-tip>svg,.cv-note>svg,.story-check>svg,.interview-score-value strong{color:var(--link)}
+.cv-summary{border-left-color:var(--primary)}
+:is(input,textarea)::placeholder{color:var(--text-secondary);opacity:1}
+:is(input[type=radio],input[type=checkbox],progress){accent-color:var(--primary)}
+:is(button,a,input,select,textarea):focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button:disabled{opacity:1;cursor:not-allowed}
+.btn:disabled{background:var(--raised);border-color:var(--control-border);color:var(--text-on-soft);transform:none}
+.voice-control:disabled,.career-starters button:disabled{background:var(--raised);border-color:var(--border);color:var(--text-secondary)}
+:disabled:is(input,textarea,select){background:var(--raised);color:var(--text-secondary);cursor:not-allowed}
+::selection{background:var(--soft-hover);color:var(--text)}
+.success{color:var(--success-text);background:var(--success-bg)}
+.warning{color:var(--warning-text);background:var(--warning-bg)}
+@media(max-width:760px){.workspace-actions{gap:10px}.nav{gap:12px}.theme-toggle{padding-inline:9px}.nav>.theme-toggle{margin-left:auto}}
+@media(max-width:430px){.nav>.theme-toggle span,.workspace-actions .theme-toggle span{display:none}}
